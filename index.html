@@ -192,6 +192,36 @@
   <div class="sheet-body" id="statsBody"></div>
 </section>
 
+<!-- ══════════════ SHEET: ALL ACHIEVEMENTS ══════════════ -->
+<section class="sheet full" id="achSheet" hidden aria-modal="true" role="dialog">
+  <div class="sheet-grab"></div>
+  <header class="sheet-head">
+    <button class="txtbtn" id="achClose">Close</button>
+    <strong>Achievements</strong>
+    <span class="txtbtn ghosted" aria-hidden="true">&nbsp;</span>
+  </header>
+
+  <div class="achtop">
+    <div id="achHead"></div>
+    <div class="searchwrap tight">
+      <svg class="searchicon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input type="search" id="achSearch" placeholder="Search achievements…" autocomplete="off">
+    </div>
+    <div class="seg" id="achShow">
+      <button class="segbtn on" data-show="all">All</button>
+      <button class="segbtn" data-show="locked">Locked</button>
+      <button class="segbtn" data-show="unlocked">Unlocked</button>
+    </div>
+    <div class="chiprow" id="achCats"></div>
+    <div class="achcount" id="achCount"></div>
+  </div>
+
+  <div class="sheet-body">
+    <div class="achlist wide" id="achGrid"></div>
+    <div class="sheetpad"></div>
+  </div>
+</section>
+
 <!-- ══════════════ SHEET: SETTINGS ══════════════ -->
 <section class="sheet" id="setSheet" hidden aria-modal="true" role="dialog">
   <div class="sheet-grab"></div>
@@ -248,6 +278,9 @@
     <p class="unlock-xp" id="unlockXp"></p>
   </div>
 </div>
+
+<!-- ══════════════ ACHIEVEMENT UNLOCK ══════════════ -->
+<div class="achpop" id="achPop" hidden></div>
 
 <div class="toast" id="toast" hidden></div>
 

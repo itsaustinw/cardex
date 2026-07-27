@@ -58,7 +58,64 @@ sighting rather than creating a duplicate, and you earn the XP again.
 places. The chips filter by rarity, type and favourites, and show live counts.
 
 **Stats tab** (bar-chart icon) — rank progress, rarity breakdown, most-spotted
-makes, types collected, and 16 achievements to chase.
+makes, types collected, and your achievement progress.
+
+---
+
+## Achievements — 707 of them
+
+This is the long game. Every achievement tracks **live progress**, not just
+locked/unlocked, so you always know how close you are.
+
+| Category | Count | Examples |
+|---|---|---|
+| **Collection** | 42 | *Centurion* (100 cars), *Four Figures* (1,000), *Ten Thousand* |
+| **Types** | 191 | Ladders per body type — *Van Novice* (1) all the way to *Van Immortal* (250) |
+| **Makes** | 202 | *Ford Fanatic* (100 Fords), *Ferrari Spotter*, *50 different marques* |
+| **Quests** | 105 | *The Big Three*, *The Holy Trinity*, *Group B Survivors*, 42 individual grails |
+| **Rarity** | 29 | *First Legendary*, *Legendary Immortal* (25), *Full House* |
+| **Colours** | 52 | *Brown Sauce*, *Goldfinger*, *Full Spectrum* |
+| **Eras** | 38 | *Roaring Twenties*, *Eighty-Year Span*, *A Century of Cars* |
+| **Fieldwork** | 33 | *Month Streak*, *Night Shift*, *Car Meet* (50 spots in one day) |
+| **Oddball** | 15 | *Perfect Ten*, *Harsh Critic*, *The Essay*, *Utterly Obsessed* |
+
+Some highlights worth hunting:
+
+- **The Big Three** — photograph a Koenigsegg, a Bugatti *and* a Pagani. 5,000 XP.
+- **The Holy Trinity** — McLaren P1 + LaFerrari + Porsche 918. 8,000 XP.
+- **Grails** — 42 single-car quests, from *Grail: Morris Minor* (1,200 XP) up to
+  *Grail: McLaren F1* (9,000 XP).
+- **Group B Survivors** — a Delta Integrale, Quattro, RS200 or 205 T16.
+- **JDM Holy Grail** — Skyline, Supra, RX-7, NSX and an Evo.
+- **Unstoppable** — spot on 100 consecutive days.
+
+There's roughly **730,000 XP** available in total, which feeds a 14-step rank
+ladder from *Kerb Crawler* to *Immortal of the Hard Shoulder*. Clearing the lot
+is a genuine multi-year project.
+
+When you save a car, any achievement it completes fires a gold unlock card
+straight after the dex entry animation. The stats sheet also shows the six
+you're **closest to unlocking**, which is dangerously moreish.
+
+Browse everything via **View all achievements** — filter by category, search by
+name, and toggle locked/unlocked.
+
+### Adding your own
+`js/achievements.js`. Each one is a small object:
+
+```js
+add({
+  id: 'q_myquest', name: 'Local Legend', icon: '🏆', cat: 'quests',
+  desc: 'Log 3 cars in your own street', goal: 3, xp: 500,
+  value: s => s.placeCount            // any number from the summary
+});
+```
+
+`value(s)` receives the pre-computed summary (`s.types`, `s.makes`, `s.model`,
+`s.streak`, `s.decades`, and plenty more — see `buildSummary`). Return a number;
+the engine handles progress bars, sorting and unlock detection. To add a new
+grail car, drop a regex into `MODEL_QUESTS` and reference it with
+`s.model.yourkey`.
 
 ---
 
