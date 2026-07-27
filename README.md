@@ -84,6 +84,51 @@ open in Excel, Google Sheets or Numbers.
 
 ---
 
+## Updating an installed app
+
+**You never reinstall, and you never lose your dex.**
+
+The home screen icon is just a pointer to your GitHub Pages URL. Push new files
+to the repo and the same icon loads the new version. Your entries and photos
+live in IndexedDB, which is completely separate from the app code — replacing
+`app.js` or `app.css` cannot touch them, and the app never wipes storage on
+upgrade.
+
+What you'll see after a deploy:
+
+1. Open the app as normal.
+2. It checks for a new version on launch (and whenever you switch back to it).
+3. A bar slides up: **"New version available — your dex is safe."**
+4. Tap **Update** → it reloads once, running the new code. Takes about a second.
+
+If you dismiss the bar, the update simply lands next time you open the app.
+Settings shows the running build (e.g. `CARDEX · offline · v2`) so you can
+confirm it landed.
+
+### If you change the files yourself
+
+Bump `VERSION` in `sw.js` whenever you deploy:
+
+```js
+const VERSION = 'v3';   // was 'v2'
+```
+
+That string names the cache bucket. Changing it is what tells every installed
+phone "there's something new" — old buckets are deleted automatically, so no
+storage is wasted. If you forget to bump it, phones may keep serving the old
+cached copy.
+
+GitHub Pages usually publishes within a minute of a push, though it can
+occasionally take a few. If an update seems slow to appear, close the app fully
+and reopen it.
+
+> **The one thing that *does* destroy your dex** is deleting the app from your
+> phone (iOS clears its storage), or clearing browser site data. Neither happens
+> during an update — but it's the reason to export a backup before switching
+> phones.
+
+---
+
 ## Files
 
 ```
