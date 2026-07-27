@@ -290,16 +290,24 @@ export function guessMeta(make, model, year) {
   return { types: [...types].slice(0, 3), rarity };
 }
 
-/* Rank titles by total XP. */
+/* Rank titles by total XP (spot XP + achievement XP).
+   Scaled against a full achievement sweep worth roughly 730,000 XP,
+   so the top ranks are a genuine long-haul. */
 export const RANKS = [
-  { min: 0,     title: 'Kerb Crawler' },
-  { min: 150,   title: 'Spotter' },
-  { min: 500,   title: 'Trainspotter of Tarmac' },
-  { min: 1200,  title: 'Car Nerd' },
-  { min: 2500,  title: 'Lay-by Legend' },
-  { min: 5000,  title: 'Concours Judge' },
-  { min: 10000, title: 'Dex Master' },
-  { min: 20000, title: 'Living Encyclopaedia' }
+  { min: 0,       title: 'Kerb Crawler' },
+  { min: 250,     title: 'Spotter' },
+  { min: 1000,    title: 'Trainspotter of Tarmac' },
+  { min: 2500,    title: 'Car Nerd' },
+  { min: 6000,    title: 'Lay-by Legend' },
+  { min: 12000,   title: 'Bonnet Botherer' },
+  { min: 25000,   title: 'Concours Judge' },
+  { min: 45000,   title: 'Marque Specialist' },
+  { min: 75000,   title: 'Dex Master' },
+  { min: 120000,  title: 'Grand Archivist' },
+  { min: 180000,  title: 'Living Encyclopaedia' },
+  { min: 275000,  title: 'Tarmac Historian' },
+  { min: 400000,  title: 'The Completionist' },
+  { min: 600000,  title: 'Immortal of the Hard Shoulder' }
 ];
 
 export function rankFor(xp) {

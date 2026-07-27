@@ -7,6 +7,7 @@ import {
   MAKES, MODELS, guessMeta, guessShape, rankFor, RANKS
 } from './data.js';
 import * as DB from './store.js';
+import { ACHIEVEMENTS, CATS, buildSummary, evaluate } from './achievements.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -48,6 +49,7 @@ async function boot() {
   buildStatSliders();
 
   S.entries = await DB.allEntries();
+  invalidateEval();
   await hydrateThumbs();
   renderChips();
   renderGrid();
@@ -67,9 +69,57 @@ async function hydrateThumbs() {
 }
 
 function registerSW() {
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
-  }
+  if (!('serviceWorker' in navigator)) return;
+
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    // A new version finished downloading while the app was open.
+    const offer = (worker) => {
+      if (!worker) return;
+      worker.addEventListener('statechange', () => {
+        if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+          showUpdateBar(worker);
+        }
+      });
+    };
+
+    if (reg.waiting && navigator.serviceWorker.controller) showUpdateBar(reg.waiting);
+    offer(reg.installing);
+    reg.addEventListener('updatefound', () => offer(reg.installing));
+
+    // Check for a new deploy on launch and whenever the app is refocused.
+    const check = () => reg.update().catch(() => {});
+    check();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') check();
+    });
+  }).catch(() => {});
+
+  // When the new worker takes control, reload once to run the new code.
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloaded) return;
+    reloaded = true;
+    location.reload();
+  });
+}
+
+function showUpdateBar(worker) {
+  if ($('#updatebar')) return;
+  const bar = document.createElement('div');
+  bar.id = 'updatebar';
+  bar.className = 'updatebar';
+  bar.innerHTML = `
+    <span>New version available — your dex is safe.</span>
+    <button type="button" id="btnUpdateNow">Update</button>
+    <button type="button" id="btnUpdateLater" aria-label="Dismiss">&times;</button>`;
+  document.body.appendChild(bar);
+
+  $('#btnUpdateNow').addEventListener('click', () => {
+    bar.remove();
+    toast('Updating…');
+    worker.postMessage({ type: 'SKIP_WAITING' });
+  });
+  $('#btnUpdateLater').addEventListener('click', () => bar.remove());
 }
 
 /* ═══════ BUILDERS ═══════ */
@@ -284,10 +334,19 @@ $('#grid').addEventListener('click', e => {
   openView(c.dataset.id);
 });
 
+/* Evaluating 700 achievements is cheap, but not free — cache it and
+   invalidate whenever the dex changes. */
+let _evalCache = null;
+function currentEval() {
+  if (!_evalCache) _evalCache = evaluate(buildSummary(S.entries));
+  return _evalCache;
+}
+function invalidateEval() { _evalCache = null; }
+
 function renderSub() {
   const n = S.entries.length;
   const sightings = S.entries.reduce((a, e) => a + (e.sightings || []).length, 0);
-  const xp = totalXP();
+  const xp = totalXP(currentEval());
   $('#tbSub').textContent = n === 0
     ? 'Empty dex — go find something'
     : `${n} ${n === 1 ? 'entry' : 'entries'} · ${sightings} spots · ${rankFor(xp).title}`;
@@ -546,17 +605,23 @@ async function save() {
   }
   delete d._touched;
 
+  // snapshot which achievements were already earned, so we can tell what's new
+  const before = new Set(currentEval().rows.filter(r => r.done).map(r => r.a.id));
+
   await DB.putEntry(d);
   S.entries = await DB.allEntries();
+  invalidateEval();
   await hydrateThumbs();
   renderChips(); renderGrid(); renderSub();
   closeSheet('#editSheet');
 
-  if (isNew) { haptic([14, 60, 22]); showUnlock(d); }
+  const earned = currentEval().rows.filter(r => r.done && !before.has(r.a.id)).map(r => r.a);
+
+  if (isNew) { haptic([14, 60, 22]); showUnlock(d, earned); }
   else {
     toast('Saved'); haptic(10);
-    // if we came from the detail view, refresh it so it isn't showing stale data
     if (S.sheetStack.includes('#viewSheet')) openView(d.id);
+    if (earned.length) setTimeout(() => showAchPopup(earned), 500);
   }
 }
 
@@ -566,6 +631,7 @@ $('#btnDelete').addEventListener('click', async () => {
   if (!confirm(`Delete #${String(S.editing.no).padStart(3, '0')} ${S.editing.make} ${S.editing.model}? This cannot be undone.`)) return;
   await DB.deleteEntry(S.editing.id);
   S.entries = await DB.allEntries();
+  invalidateEval();
   renderChips(); renderGrid(); renderSub();
   closeSheet('#editSheet');
   closeSheet('#viewSheet');
@@ -574,7 +640,7 @@ $('#btnDelete').addEventListener('click', async () => {
 
 /* ═══════ UNLOCK ═══════ */
 
-function showUnlock(entry) {
+function showUnlock(entry, earned = []) {
   const r = RARITY_MAP[entry.rarity] || RARITY_MAP.common;
   const pid = entry.photos && entry.photos[0];
   const url = pid ? S.urls.get(pid) : null;
@@ -586,16 +652,63 @@ function showUnlock(entry) {
   $('#unlockName').textContent = `${entry.make} ${entry.model}`.trim();
   $('#unlockRarity').textContent = r.label;
   $('#unlockRarity').style.color = r.colour;
-  $('#unlockXp').textContent = `+${r.xp} XP`;
+  const bonus = earned.reduce((a, x) => a + x.xp, 0);
+  $('#unlockXp').innerHTML = bonus
+    ? `+${r.xp} XP <span style="opacity:.75">+ ${bonus.toLocaleString()} bonus</span>`
+    : `+${r.xp} XP`;
+
   const u = $('#unlock');
   u.hidden = false; u.classList.remove('out');
   const dismiss = () => {
     u.classList.add('out');
-    setTimeout(() => { u.hidden = true; u.classList.remove('out'); }, 300);
+    setTimeout(() => {
+      u.hidden = true; u.classList.remove('out');
+      if (earned.length) showAchPopup(earned);
+    }, 300);
     u.removeEventListener('click', dismiss);
+    clearTimeout(autoT);
   };
   u.addEventListener('click', dismiss);
-  setTimeout(() => { if (!u.hidden) dismiss(); }, 3400);
+  const autoT = setTimeout(() => { if (!u.hidden) dismiss(); }, 3400);
+}
+
+/* ═══════ ACHIEVEMENT UNLOCK POPUP ═══════ */
+
+function showAchPopup(list) {
+  if (!list || !list.length) return;
+  // biggest prize first, cap the queue so 20 unlocks don't trap you
+  const queue = [...list].sort((a, b) => b.xp - a.xp).slice(0, 5);
+  const extra = list.length - queue.length;
+  const host = $('#achPop');
+  let i = 0;
+
+  const step = () => {
+    if (i >= queue.length) {
+      host.hidden = true;
+      host.classList.remove('in');
+      if (extra > 0) toast(`+${extra} more achievement${extra > 1 ? 's' : ''} unlocked`);
+      return;
+    }
+    const a = queue[i++];
+    host.innerHTML = `
+      <div class="achpop-card">
+        <div class="achpop-rays" aria-hidden="true"></div>
+        <p class="achpop-kicker">ACHIEVEMENT UNLOCKED</p>
+        <div class="achpop-icon">${a.icon}</div>
+        <h3 class="achpop-name">${esc(a.name)}</h3>
+        <p class="achpop-desc">${esc(a.desc)}</p>
+        <p class="achpop-xp">+${a.xp.toLocaleString()} XP</p>
+        ${queue.length > 1 ? `<p class="achpop-count">${i} of ${queue.length}</p>` : ''}
+      </div>`;
+    host.hidden = false;
+    requestAnimationFrame(() => host.classList.add('in'));
+    haptic([12, 45, 18]);
+    clearTimeout(host._t);
+    host._t = setTimeout(step, 2400);
+  };
+
+  host.onclick = () => { clearTimeout(host._t); step(); };
+  step();
 }
 
 /* ═══════ DETAIL VIEW ═══════ */
@@ -693,6 +806,7 @@ async function openView(id) {
     e.sightings.push({ at: Date.now(), place: place.trim() });
     await DB.putEntry(e);
     S.entries = await DB.allEntries();
+    invalidateEval();
     renderGrid(); renderSub();
     openView(id);
     toast(`Sighting #${e.sightings.length} logged  ·  +${r.xp} XP`);
@@ -703,6 +817,7 @@ async function openView(id) {
     e.fav = !e.fav;
     await DB.putEntry(e);
     S.entries = await DB.allEntries();
+    invalidateEval();
     renderChips(); renderGrid();
     openView(id);
     toast(e.fav ? 'Added to favourites' : 'Removed from favourites');
@@ -727,59 +842,32 @@ function statColour(v) {
 
 /* ═══════ STATS SHEET ═══════ */
 
-function totalXP() {
+/* XP from the cars themselves. */
+function spotXP() {
   return S.entries.reduce((a, e) => {
     const r = RARITY_MAP[e.rarity] || RARITY_MAP.common;
     return a + r.xp * Math.max(1, (e.sightings || []).length);
   }, 0);
 }
 
-const ACHIEVEMENTS = [
-  { id: 'first',   icon: '📸', name: 'First Blood',      desc: 'Log your first car',              test: s => s.n >= 1 },
-  { id: 'ten',     icon: '🔟', name: 'Getting Going',     desc: '10 entries in the dex',           test: s => s.n >= 10 },
-  { id: 'fifty',   icon: '🏁', name: 'Half Century',      desc: '50 entries in the dex',           test: s => s.n >= 50 },
-  { id: 'hundred', icon: '💯', name: 'Centurion',         desc: '100 entries in the dex',          test: s => s.n >= 100 },
-  { id: 'k',       icon: '🏆', name: 'Four Figures',      desc: '1,000 entries in the dex',        test: s => s.n >= 1000 },
-  { id: 'leg',     icon: '👑', name: 'Legend Hunter',     desc: 'Bag a Legendary',                 test: s => s.rar.legendary > 0 },
-  { id: 'epic3',   icon: '💜', name: 'Exotic Taste',      desc: '3 Epic or better',                test: s => (s.rar.epic + s.rar.legendary) >= 3 },
-  { id: 'types10', icon: '🎨', name: 'Broad Church',      desc: 'Cover 10 different types',        test: s => s.typeCount >= 10 },
-  { id: 'makes20', icon: '🌍', name: 'Cosmopolitan',      desc: '20 different manufacturers',      test: s => s.makeCount >= 20 },
-  { id: 'rainbow', icon: '🌈', name: 'Full Spectrum',     desc: '8 different colours logged',      test: s => s.colourCount >= 8 },
-  { id: 'repeat',  icon: '🔁', name: 'Old Friend',        desc: 'Spot the same car 5 times',       test: s => s.maxSightings >= 5 },
-  { id: 'classic', icon: '🕰️', name: 'Time Traveller',    desc: 'Log something pre-1980',          test: s => s.oldest && s.oldest < 1980 },
-  { id: 'jdm',     icon: '🗾', name: 'Kanjo Runner',      desc: '5 JDM entries',                   test: s => (s.types.jdm || 0) >= 5 },
-  { id: 'ev',      icon: '⚡', name: 'Silent Running',     desc: '10 electric entries',             test: s => (s.types.ev || 0) >= 10 },
-  { id: 'hot',     icon: '🔥', name: 'Hot Stuff',         desc: '10 hot hatches',                  test: s => (s.types.hothatch || 0) >= 10 },
-  { id: 'shots',   icon: '🖼️', name: 'Photographer',      desc: '100 photos taken',                test: s => s.photos >= 100 }
-];
+/* Spot XP + every achievement you've earned. */
+function totalXP(evalResult) {
+  const ev = evalResult || evaluate(buildSummary(S.entries));
+  return spotXP() + ev.xp;
+}
 
+
+/* One shared summary per render, reused by the charts and all 700 achievements. */
 function statSummary() {
-  const rar = { common: 0, uncommon: 0, rare: 0, epic: 0, legendary: 0 };
-  const types = {}, makes = {}, colours = {};
-  let photos = 0, maxSightings = 0, oldest = null, sightings = 0;
-  for (const e of S.entries) {
-    rar[e.rarity] = (rar[e.rarity] || 0) + 1;
-    (e.types || []).forEach(t => types[t] = (types[t] || 0) + 1);
-    if (e.make) makes[e.make] = (makes[e.make] || 0) + 1;
-    if (e.colour) colours[e.colour] = (colours[e.colour] || 0) + 1;
-    photos += (e.photos || []).length;
-    const ns = (e.sightings || []).length;
-    sightings += ns;
-    maxSightings = Math.max(maxSightings, ns);
-    const y = Number(e.year);
-    if (y && (!oldest || y < oldest)) oldest = y;
-  }
-  return {
-    n: S.entries.length, rar, types, makes, colours, photos, maxSightings, oldest, sightings,
-    typeCount: Object.keys(types).length,
-    makeCount: Object.keys(makes).length,
-    colourCount: Object.keys(colours).length
-  };
+  const sum = buildSummary(S.entries);
+  sum.rar = sum.rarity;              // legacy alias used by the charts
+  return sum;
 }
 
 function renderStats() {
   const s = statSummary();
-  const xp = totalXP();
+  const ev = currentEval();
+  const xp = totalXP(ev);
   const rank = rankFor(xp);
   const next = RANKS.find(r => r.min > xp);
   const prevMin = rank.min;
@@ -841,29 +929,176 @@ function renderStats() {
       </div></div>` : ''}
 
     <div class="vsection">
-      <h3>Achievements · ${ACHIEVEMENTS.filter(a => a.test(s)).length}/${ACHIEVEMENTS.length}</h3>
-      <div class="achlist">
-        ${ACHIEVEMENTS.map(a => `
-          <div class="ach ${a.test(s) ? 'got' : ''}">
-            <div class="ai">${a.icon}</div>
-            <div class="an">${esc(a.name)}</div>
-            <div class="ad">${esc(a.desc)}</div>
-          </div>`).join('')}
+      <h3>Achievements · ${ev.unlocked}/${ev.total}</h3>
+      <div class="achsummary">
+        <div class="achbar"><i style="width:${(ev.unlocked / ev.total * 100).toFixed(1)}%"></i></div>
+        <div class="achmeta">
+          <span>${(ev.unlocked / ev.total * 100).toFixed(1)}% complete</span>
+          <span>${ev.xp.toLocaleString()} XP earned</span>
+        </div>
       </div>
+      <button class="btn ghost block" id="btnAchAll" style="margin-top:12px">
+        View all ${ev.total} achievements
+      </button>
+
+      <h3 style="margin-top:22px">Closest to unlocking</h3>
+      <div class="achlist wide" id="achNear"></div>
     </div>
     <div class="sheetpad"></div>
   `;
 }
 
-$('#btnStats').addEventListener('click', () => { renderStats(); openSheet('#statsSheet'); });
+/* ── the six you're closest to finishing (excluding already-done) ── */
+function renderNearMisses(ev) {
+  const host = $('#achNear');
+  if (!host) return;
+  const near = ev.rows
+    .filter(r => !r.done && r.raw > 0)
+    .sort((a, b) => (b.pct - a.pct) || (a.a.goal - b.a.goal))
+    .slice(0, 6);
+
+  const pool = near.length ? near : ev.rows
+    .filter(r => !r.done)
+    .sort((a, b) => a.a.goal - b.a.goal || a.a.xp - b.a.xp)
+    .slice(0, 6);
+
+  host.innerHTML = pool.map(achCardHTML).join('') ||
+    `<p class="muted" style="grid-column:1/-1">Every single one unlocked. Extraordinary.</p>`;
+}
+
+function achCardHTML(r) {
+  const a = r.a;
+  const pctTxt = Math.round(r.pct * 100);
+  return `
+    <div class="ach ${r.done ? 'got' : ''} ${a.grail && r.done ? 'grail' : ''}">
+      <div class="ahead">
+        <span class="ai">${a.icon}</span>
+        <span class="axp">${r.done ? '✓' : ''} ${a.xp.toLocaleString()} XP</span>
+      </div>
+      <div class="an">${esc(a.name)}</div>
+      <div class="ad">${esc(a.desc)}</div>
+      ${a.goal > 1 ? `
+        <div class="aprog"><i style="width:${pctTxt}%"></i></div>
+        <div class="apct">${r.raw.toLocaleString()} / ${a.goal.toLocaleString()}</div>
+      ` : `<div class="apct single">${r.done ? 'Unlocked' : 'Not yet found'}</div>`}
+    </div>`;
+}
+
+$('#btnStats').addEventListener('click', () => {
+  renderStats();
+  renderNearMisses(currentEval());
+  openSheet('#statsSheet');
+});
+
+/* ═══════ FULL ACHIEVEMENT BROWSER ═══════ */
+
+const achView = { cat: 'all', show: 'all', q: '' };
+
+function renderAchSheet() {
+  const ev = currentEval();
+  const counts = { all: { got: 0, tot: 0 } };
+  for (const c of CATS) counts[c.id] = { got: 0, tot: 0 };
+  for (const r of ev.rows) {
+    counts.all.tot++; if (r.done) counts.all.got++;
+    if (counts[r.a.cat]) { counts[r.a.cat].tot++; if (r.done) counts[r.a.cat].got++; }
+  }
+
+  $('#achHead').innerHTML = `
+    <div class="achbar big"><i style="width:${(ev.unlocked / ev.total * 100).toFixed(1)}%"></i></div>
+    <div class="achmeta">
+      <span><strong>${ev.unlocked}</strong> of ${ev.total} unlocked</span>
+      <span>${ev.xp.toLocaleString()} XP</span>
+    </div>`;
+
+  const tabs = [{ id: 'all', label: 'All', icon: '🏆' }, ...CATS];
+  $('#achCats').innerHTML = tabs.map(c => {
+    const n = counts[c.id] || { got: 0, tot: 0 };
+    return `<button class="chip ${achView.cat === c.id ? 'on' : ''}" data-cat="${c.id}">
+      ${c.icon} ${esc(c.label)} <span class="n">${n.got}/${n.tot}</span></button>`;
+  }).join('');
+
+  $$('#achShow .segbtn').forEach(b => b.classList.toggle('on', b.dataset.show === achView.show));
+
+  const q = achView.q.trim().toLowerCase();
+  let rows = ev.rows.filter(r => {
+    if (achView.cat !== 'all' && r.a.cat !== achView.cat) return false;
+    if (achView.show === 'locked' && r.done) return false;
+    if (achView.show === 'unlocked' && !r.done) return false;
+    if (q && !(`${r.a.name} ${r.a.desc}`.toLowerCase().includes(q))) return false;
+    return true;
+  });
+
+  // unlocked first when browsing everything, otherwise closest-first
+  rows.sort((a, b) => {
+    if (achView.show === 'all' && a.done !== b.done) return a.done ? -1 : 1;
+    if (!a.done && !b.done) return (b.pct - a.pct) || (a.a.goal - b.a.goal);
+    return b.a.xp - a.a.xp;
+  });
+
+  $('#achCount').textContent = `${rows.length} shown`;
+  const body = $('#achGrid');
+  if (!rows.length) {
+    body.innerHTML = `<p class="muted" style="grid-column:1/-1;text-align:center;padding:30px 0">Nothing matches that filter.</p>`;
+    return;
+  }
+  // cap the DOM for speed; there can be 700 of these
+  const CAP = 180;
+  body.innerHTML = rows.slice(0, CAP).map(achCardHTML).join('') +
+    (rows.length > CAP
+      ? `<p class="muted" style="grid-column:1/-1;text-align:center;padding:14px 0">
+           +${rows.length - CAP} more — narrow it down with search or a category.</p>`
+      : '');
+}
+
+$('#statsBody').addEventListener('click', e => {
+  if (e.target.closest('#btnAchAll')) { openAchSheet(); }
+});
+
+function openAchSheet() {
+  renderAchSheet();
+  openSheet('#achSheet');
+  $('#achSheet .sheet-body').scrollTop = 0;
+}
+
+$('#achClose').addEventListener('click', () => closeSheet('#achSheet'));
+$('#achCats').addEventListener('click', e => {
+  const b = e.target.closest('[data-cat]'); if (!b) return;
+  achView.cat = b.dataset.cat; renderAchSheet();
+  $('#achSheet .sheet-body').scrollTop = 0;
+  haptic(6);
+});
+$('#achShow').addEventListener('click', e => {
+  const b = e.target.closest('[data-show]'); if (!b) return;
+  achView.show = b.dataset.show; renderAchSheet();
+  haptic(6);
+});
+$('#achSearch').addEventListener('input', e => { achView.q = e.target.value; renderAchSheet(); });
 $('#statsClose').addEventListener('click', () => closeSheet('#statsSheet'));
 
 /* ═══════ SETTINGS ═══════ */
 
 $('#btnSettings').addEventListener('click', async () => {
   await renderUsage();
+  showVersion();
   openSheet('#setSheet');
 });
+
+/* Ask the active service worker which build is running, so you can confirm at
+   a glance that an update actually landed on the phone. */
+function showVersion() {
+  const el = $('#version');
+  if (!el) return;
+  const sw = navigator.serviceWorker;
+  if (!sw || !sw.controller) { el.textContent = 'CARDEX · offline'; return; }
+  const ch = new MessageChannel();
+  const t = setTimeout(() => { ch.port1.close(); }, 1200);
+  ch.port1.onmessage = ev => {
+    clearTimeout(t);
+    if (ev.data && ev.data.version) el.textContent = `CARDEX · offline · ${ev.data.version}`;
+    ch.port1.close();
+  };
+  try { sw.controller.postMessage({ type: 'VERSION' }, [ch.port2]); } catch {}
+}
 $('#setClose').addEventListener('click', () => closeSheet('#setSheet'));
 
 async function renderUsage() {
@@ -928,6 +1163,7 @@ $('#restoreInput').addEventListener('change', async e => {
   try {
     const res = await DB.importBackup(data, mode);
     S.entries = await DB.allEntries();
+    invalidateEval();
     await hydrateThumbs();
     renderChips(); renderGrid(); renderSub();
     hideToast();
@@ -942,6 +1178,7 @@ $('#btnWipe').addEventListener('click', async () => {
   S.urls.clear();
   await DB.wipe();
   S.entries = [];
+  invalidateEval();
   renderChips(); renderGrid(); renderSub();
   closeSheet('#setSheet');
   toast('Everything deleted');
