@@ -4,7 +4,7 @@
    Your dex (entries + photos) lives in IndexedDB and never passes through
    here — clearing or replacing this cache cannot touch your data. */
 
-const VERSION = 'v3';
+const VERSION = 'v4';
 const CACHE = `cardex-${VERSION}`;
 
 const SHELL = [
@@ -23,9 +23,11 @@ const SHELL = [
 ];
 
 self.addEventListener('install', e => {
-  // Precache the new shell, but do NOT take over yet. The open page keeps
-  // running the old version until the user taps "Update" (or reopens the app),
-  // which avoids a half-old/half-new mismatch mid-session.
+  // Take over as soon as we're cached. This MUST NOT wait for permission from
+  // the running page: older builds of this app have no update-handling code at
+  // all, so a "waiting" worker would sit there forever while the old cached
+  // app.js kept being served — the update would download and never land.
+  // Activating ourselves is what makes every deploy self-healing.
   //
   // cache:'reload' is essential: without it these fetches can be served from
   // the browser's own HTTP cache, which would bake the OLD files into the NEW
@@ -37,16 +39,34 @@ self.addEventListener('install', e => {
           .then(res => (res && res.ok) ? c.put(url, res) : null)
           .catch(() => null)
       )
-    )).catch(() => {})
+    )).then(() => self.skipWaiting()).catch(() => self.skipWaiting())
   );
 });
 
 self.addEventListener('activate', e => {
-  e.waitUntil(
-    caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
-      .then(() => self.clients.claim())
-  );
+  e.waitUntil((async () => {
+    const keys = await caches.keys();
+    const stale = keys.filter(k => k !== CACHE && k.startsWith('cardex-'));
+    await Promise.all(stale.map(k => caches.delete(k)));
+    await self.clients.claim();
+
+    // An upgrade leaves open tabs running the code they loaded before we took
+    // over. Tell them to reload so the new build runs immediately.
+    //
+    // This is deliberately fire-and-forget: awaiting a client reload here
+    // would deadlock, because the reload can't be served until activation
+    // finishes, and activation can't finish until the reload completes.
+    if (stale.length) {
+      self.clients.matchAll({ type: 'window' }).then(list => {
+        for (const c of list) {
+          // postMessage covers modern builds; navigate() also rescues pages
+          // running code too old to listen for it. Both are fire-and-forget.
+          try { c.postMessage({ type: 'RELOAD' }); } catch {}
+          try { c.navigate(c.url); } catch {}
+        }
+      }).catch(() => {});
+    }
+  })());
 });
 
 // The page asks us to activate immediately when the user accepts an update.

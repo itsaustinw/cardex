@@ -662,26 +662,6 @@ input[type=range]::-moz-range-thumb{
   margin-top:11px;letter-spacing:.09em;
 }
 
-/* ═══════ UPDATE BAR ═══════ */
-.updatebar{
-  position:fixed;z-index:70;left:12px;right:12px;
-  bottom:calc(var(--safe-b) + 104px);
-  display:flex;align-items:center;gap:10px;
-  background:#f0f3f8;color:#12151b;
-  padding:11px 12px 11px 15px;border-radius:14px;
-  box-shadow:0 10px 30px rgba(0,0,0,.55);
-  animation:toastin .28s cubic-bezier(.2,.9,.3,1.1);
-}
-.updatebar span{flex:1;font-size:13px;font-weight:700;line-height:1.35}
-.updatebar #btnUpdateNow{
-  flex:0 0 auto;background:var(--red);color:#fff;
-  font-size:13px;font-weight:800;padding:8px 14px;border-radius:9px;
-}
-.updatebar #btnUpdateLater{
-  flex:0 0 auto;width:26px;height:26px;border-radius:50%;
-  font-size:19px;line-height:1;color:#6c7686;display:grid;place-items:center;
-}
-
 /* ═══════ TOAST ═══════ */
 .toast{
   position:fixed;z-index:95;left:50%;transform:translateX(-50%);

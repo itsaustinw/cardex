@@ -70,21 +70,37 @@ async function hydrateThumbs() {
 
 function registerSW() {
   if (!('serviceWorker' in navigator)) return;
+  const sw = navigator.serviceWorker;
 
-  navigator.serviceWorker.register('sw.js').then(reg => {
-    // A new version finished downloading while the app was open.
-    const offer = (worker) => {
-      if (!worker) return;
-      worker.addEventListener('statechange', () => {
-        if (worker.state === 'installed' && navigator.serviceWorker.controller) {
-          showUpdateBar(worker);
-        }
-      });
+  // One reload per page load, no matter which path triggers it. Without this
+  // guard a worker takeover plus a RELOAD message could bounce the page twice.
+  let reloading = false;
+  const reloadOnce = () => {
+    if (reloading) return;
+    reloading = true;
+    location.reload();
+  };
+
+  sw.addEventListener('controllerchange', reloadOnce);
+  sw.addEventListener('message', e => {
+    if (e.data && e.data.type === 'RELOAD') reloadOnce();
+  });
+
+  sw.register('sw.js').then(reg => {
+    // A waiting worker means an update is cached but hasn't taken over. New
+    // workers self-activate, so this only happens if one is stuck (e.g. left
+    // over from an older build) — nudge it through rather than prompting.
+    const nudge = () => {
+      if (reg.waiting) {
+        try { reg.waiting.postMessage({ type: 'SKIP_WAITING' }); } catch {}
+      }
     };
-
-    if (reg.waiting && navigator.serviceWorker.controller) showUpdateBar(reg.waiting);
-    offer(reg.installing);
-    reg.addEventListener('updatefound', () => offer(reg.installing));
+    nudge();
+    reg.addEventListener('updatefound', () => {
+      const w = reg.installing;
+      if (!w) return;
+      w.addEventListener('statechange', () => { if (w.state === 'installed') nudge(); });
+    });
 
     // Check for a new deploy on launch and whenever the app is refocused.
     const check = () => reg.update().catch(() => {});
@@ -92,34 +108,8 @@ function registerSW() {
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') check();
     });
+    setInterval(check, 60 * 60 * 1000);
   }).catch(() => {});
-
-  // When the new worker takes control, reload once to run the new code.
-  let reloaded = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (reloaded) return;
-    reloaded = true;
-    location.reload();
-  });
-}
-
-function showUpdateBar(worker) {
-  if ($('#updatebar')) return;
-  const bar = document.createElement('div');
-  bar.id = 'updatebar';
-  bar.className = 'updatebar';
-  bar.innerHTML = `
-    <span>New version available — your dex is safe.</span>
-    <button type="button" id="btnUpdateNow">Update</button>
-    <button type="button" id="btnUpdateLater" aria-label="Dismiss">&times;</button>`;
-  document.body.appendChild(bar);
-
-  $('#btnUpdateNow').addEventListener('click', () => {
-    bar.remove();
-    toast('Updating…');
-    worker.postMessage({ type: 'SKIP_WAITING' });
-  });
-  $('#btnUpdateLater').addEventListener('click', () => bar.remove());
 }
 
 /* ═══════ BUILDERS ═══════ */

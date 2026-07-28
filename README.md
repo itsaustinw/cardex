@@ -154,12 +154,11 @@ upgrade.
 What you'll see after a deploy:
 
 1. Open the app as normal.
-2. It checks for a new version on launch (and whenever you switch back to it).
-3. A bar slides up: **"New version available — your dex is safe."**
-4. Tap **Update** → it reloads once, running the new code. Takes about a second.
+2. It checks for a new version on launch, on refocus, and hourly.
+3. If there's one, it installs and reloads itself — usually within a second or
+   two of opening. No prompt, no buttons, nothing to tap.
 
-If you dismiss the bar, the update simply lands next time you open the app.
-Settings shows the running build (e.g. `CARDEX · offline · v2`) so you can
+Settings shows the running build (e.g. `CARDEX · offline · v4`) so you can
 confirm it landed.
 
 ### If you change the files yourself
@@ -174,6 +173,19 @@ That string names the cache bucket. Changing it is what tells every installed
 phone "there's something new" — old buckets are deleted automatically, so no
 storage is wasted. If you forget to bump it, phones may keep serving the old
 cached copy.
+
+**If a phone ever seems stuck on an old version**, the fix is to force the
+service worker to re-register:
+
+- **iPhone:** Settings → Safari → Advanced → Website Data → find your site →
+  swipe to delete. (This clears the *cache*, not your dex — your entries live in
+  IndexedDB. Export a backup first anyway, belt and braces.)
+- **Android Chrome:** ⋮ → Settings → Site settings → your site → Clear & reset.
+- **Either:** open the URL in a normal browser tab (not the installed app) and
+  hard-refresh a couple of times.
+
+This shouldn't be necessary from v4 onward — updates now activate themselves
+rather than waiting for the page to grant permission.
 
 GitHub Pages usually publishes within a minute of a push, though it can
 occasionally take a few. If an update seems slow to appear, close the app fully
