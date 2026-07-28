@@ -62,7 +62,44 @@ makes, types collected, and your achievement progress.
 
 ---
 
-## Achievements — 707 of them
+## The catalogue — 3,006 real cars
+
+CARDEX ships with a hand-built catalogue of **3,006 production cars across 232
+makes**, split by *generation* — so a BMW 3 Series is seven separate entries
+(E21, E30, E36, E46, E90, F30, G20), not one.
+
+When you type a make and model the app recognises, it fills in the body type and
+rarity for you from hand-checked data. Type "Porsche 911 (993)" and it knows
+that's an Epic sports car from 1994–98. Type "MG EX181" and it knows it's a
+one-off land-speed-record car.
+
+**There is deliberately no browsable list.** You don't get to scroll a catalogue
+of everything you're missing — the achievements tell you what's out there, and
+you have to find the cars in the wild. Your stats screen shows how much of the
+catalogue you've covered, and nothing more.
+
+### The Mythic tier
+Above Legendary sits **Mythic** (hot pink, 200 XP) — reserved for roughly 390
+genuine one-offs, works race cars, prototypes and museum pieces. The
+**MG EX181**, the **Le Mans-winning GT40**, the **Ferrari 250 GTO**, the
+**McLaren F1**, the **Bugatti Type 41 Royale**. If you ever photograph one of
+these in person, it should feel like an event.
+
+Rarity across the catalogue is set by *how hard the car is to actually spot*,
+not how exotic the name sounds:
+
+| Tier | Share | What it means |
+|---|---|---|
+| Common | 20% | Still on every road |
+| Uncommon | 13% | Older mainstream, premium dailies |
+| Rare | 16% | Performance trims, 25+ year old ordinary cars |
+| Epic | 16% | Supercars, desirable classics |
+| Legendary | 22% | Homologation specials, halo cars |
+| Mythic | 13% | One-offs, race winners, prototypes |
+
+---
+
+## Achievements — 1,141 of them
 
 This is the long game. Every achievement tracks **live progress**, not just
 locked/unlocked, so you always know how close you are.
@@ -77,10 +114,21 @@ locked/unlocked, so you always know how close you are.
 | **Colours** | 52 | *Brown Sauce*, *Goldfinger*, *Full Spectrum* |
 | **Eras** | 38 | *Roaring Twenties*, *Eighty-Year Span*, *A Century of Cars* |
 | **Fieldwork** | 33 | *Month Streak*, *Night Shift*, *Car Meet* (50 spots in one day) |
+| **Brand Hunts** | 425 | *Every Lamborghini*, *Ferrari Curator*, *MG Completionist* |
 | **Oddball** | 15 | *Perfect Ten*, *Harsh Critic*, *The Essay*, *Utterly Obsessed* |
+
+### Brand hunts
+Every make with 3+ catalogue entries gets a completion ladder, measured against
+the real catalogue. *Every Lamborghini* means finding all 40 Lamborghini models.
+*Every Bugatti* is 14. Partial milestones (25%, 50%, 75%) keep the big marques
+approachable — Ford has 171 entries, so nobody is completing that quickly.
+
+There are also overall catalogue milestones, from *Catalogued* (10 models) up to
+*Every Car Known* (all 3,006).
 
 Some highlights worth hunting:
 
+- **Every Lamborghini** — all 40 of them. 375+ XP and a very long hunt.
 - **The Big Three** — photograph a Koenigsegg, a Bugatti *and* a Pagani. 390 XP.
 - **The Holy Trinity** — McLaren P1 + LaFerrari + Porsche 918. 490 XP.
 - **Grails** — 42 single-car quests, from *Grail: Morris Minor* (190 XP) up to
@@ -132,7 +180,13 @@ you're **closest to unlocking**, which is dangerously moreish.
 Browse everything via **View all achievements** — filter by category, search by
 name, and toggle locked/unlocked.
 
-### Adding your own
+### Adding cars to the catalogue
+`js/catalogue.js` is generated. Each row is
+`[model, yearFrom, yearTo, type, rarity]` under its make, and generation codes
+live in the model string (`"911 (993)"`). You can hand-edit it safely — just keep
+the shape — and new entries automatically feed the brand-hunt achievements.
+
+### Adding your own achievements
 `js/achievements.js`. Each one is a small object:
 
 ```js
@@ -241,7 +295,9 @@ cardex/
 ├─ js/
 │  ├─ app.js               UI, rendering, interactions
 │  ├─ store.js             IndexedDB, image compression, backup/restore
-│  └─ data.js              types, rarities, ~100 makes, ~1,500 models, guesser
+│  ├─ data.js              types, rarities, ranks, make list, guesser
+│  ├─ catalogue.js         3,006 catalogued cars (generated — see below)
+│  └─ achievements.js      1,141 achievements + the scoring engine
 └─ icons/                  generated app icons, all sizes
 ```
 

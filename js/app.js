@@ -4,10 +4,14 @@
 
 import {
   TYPES, TYPE_MAP, RARITIES, RARITY_MAP, COLOURS, COLOUR_MAP, STATS,
-  MAKES, MODELS, guessMeta, guessShape, rankFor, RANKS
+  MAKES, MODELS, guessMeta, guessShape, rankFor, RANKS, setCatalogueLookup
 } from './data.js';
 import * as DB from './store.js';
 import { ACHIEVEMENTS, CATS, buildSummary, evaluate } from './achievements.js';
+import { CATALOGUE, CATALOGUE_MAKES, CATALOGUE_COUNT, lookup as catLookup } from './catalogue.js';
+
+/* Let the guesser consult the catalogue. */
+setCatalogueLookup(catLookup);
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -115,11 +119,17 @@ function registerSW() {
 /* ═══════ BUILDERS ═══════ */
 
 function buildDatalists() {
-  $('#dlMakes').innerHTML = MAKES.map(m => `<option value="${esc(m)}">`).join('');
+  // union of the curated make list and every make in the catalogue
+  const all = [...new Set([...MAKES, ...CATALOGUE_MAKES])]
+    .sort((a, b) => a.localeCompare(b));
+  $('#dlMakes').innerHTML = all.map(m => `<option value="${esc(m)}">`).join('');
 }
 
 function refreshModelList(make) {
-  const list = MODELS[make] || [];
+  // catalogue first (generation-level, richer), then any curated extras
+  const cat = (CATALOGUE[make] || []).map(r => r[0]);
+  const extra = (MODELS[make] || []).filter(x => !cat.includes(x));
+  const list = [...cat, ...extra];
   $('#dlModels').innerHTML = list.map(m => `<option value="${esc(m)}">`).join('');
 }
 
@@ -309,7 +319,7 @@ function renderGrid() {
       <div class="meta">
         <div class="no">#${String(e.no).padStart(3, '0')}</div>
         <div class="nm">${esc(e.model || e.make || 'Unknown')}</div>
-        <div class="mk">${esc(e.model ? (e.make || '—') : '')}${e.year ? (e.model ? ' · ' : '') + e.year : ''}</div>
+        <div class="mk">${esc(subMake(e))}${e.year ? (subMake(e) ? ' · ' : '') + e.year : ''}</div>
         <div class="tags">${(e.types || []).slice(0, 3).map(t => {
           const ty = TYPE_MAP[t]; if (!ty) return '';
           return `<span class="tag" style="color:${readable(ty.colour)};background:${hexA(ty.colour, .17)}">${esc(ty.label)}</span>`;
@@ -639,7 +649,7 @@ function showUnlock(entry, earned = []) {
     ? `<img src="${url}" alt="">`
     : `<div class="noshot"><svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>`;
   $('#unlockNo').textContent = `#${String(entry.no).padStart(3, '0')}`;
-  $('#unlockName').textContent = `${entry.make} ${entry.model}`.trim();
+  $('#unlockName').textContent = fullName(entry.make, entry.model);
   $('#unlockRarity').textContent = r.label;
   $('#unlockRarity').style.color = r.colour;
   const bonus = earned.reduce((a, x) => a + x.xp, 0);
@@ -730,8 +740,8 @@ async function openView(id) {
 
     <div class="vtitle">
       <div class="vno">ENTRY #${String(e.no).padStart(3, '0')} · SPOTTED ${sights.length}×</div>
-      <h2>${esc(e.model || 'Unknown')}</h2>
-      <div class="vsub">${esc(e.make || '—')}${e.year ? ' · ' + e.year : ''}</div>
+      <h2>${esc(e.model || e.make || 'Unknown')}</h2>
+      <div class="vsub">${esc([subMake(e), e.year].filter(Boolean).join(' · ')) || '—'}</div>
       <div class="vbadges">
         <span class="vbadge" style="color:#0d1015;background:${r.colour}">${esc(r.label)}</span>
         ${(e.types || []).map(t => {
@@ -881,6 +891,18 @@ function renderStats() {
       <div class="kpi"><div class="n">${s.n}</div><div class="l">ENTRIES</div></div>
       <div class="kpi"><div class="n">${s.sightings}</div><div class="l">SPOTS</div></div>
       <div class="kpi"><div class="n">${s.makeCount}</div><div class="l">MAKES</div></div>
+    </div>
+
+    <div class="vsection" style="margin-top:0">
+      <h3>Catalogue</h3>
+      <div class="achsummary">
+        <div class="achbar"><i style="width:${(s.catCount / CATALOGUE_COUNT * 100).toFixed(2)}%"></i></div>
+        <div class="achmeta">
+          <span><strong>${s.catCount.toLocaleString()}</strong> of ${CATALOGUE_COUNT.toLocaleString()} known cars found</span>
+          <span>${(s.catCount / CATALOGUE_COUNT * 100).toFixed(1)}%</span>
+        </div>
+      </div>
+      <p class="hint" style="margin-top:9px">Log a car the catalogue recognises and it counts towards brand hunts. Nothing is listed for you — you have to find them.</p>
     </div>
 
     <div class="vsection" style="margin-top:0">
@@ -1198,6 +1220,29 @@ function uid() {
   return (crypto.randomUUID ? crypto.randomUUID() : 'x' + Date.now() + Math.random().toString(36).slice(2));
 }
 function deepCopy(o) { return JSON.parse(JSON.stringify(o)); }
+/* Catalogue models sometimes legitimately include the make ("DS 3",
+   "MG EX181", "Mini Cooper"). Don't print it twice. */
+/* The make, unless the model line already says it. */
+function subMake(e) {
+  const mk = String(e.make || '').trim();
+  const md = String(e.model || '').trim();
+  if (!md) return '';
+  if (!mk) return '';
+  if (md.toLowerCase().startsWith(mk.toLowerCase() + ' ') ||
+      md.toLowerCase() === mk.toLowerCase()) return '';
+  return mk;
+}
+
+function fullName(make, model) {
+  const mk = String(make || '').trim();
+  const md = String(model || '').trim();
+  if (!mk) return md;
+  if (!md) return mk;
+  if (md.toLowerCase().startsWith(mk.toLowerCase() + ' ') ||
+      md.toLowerCase() === mk.toLowerCase()) return md;
+  return `${mk} ${md}`;
+}
+
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }

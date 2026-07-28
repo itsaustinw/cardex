@@ -38,13 +38,15 @@ export const TYPES = [
 export const TYPE_MAP = Object.fromEntries(TYPES.map(t => [t.id, t]));
 
 /* Spot XP. Kept on a gentle curve — a Legendary is worth ~12 commons, not 40,
-   so a big day of ordinary spotting still competes with one lucky find. */
+   so a big day of ordinary spotting still competes with one lucky find.
+   Mythic sits above Legendary: one-offs, works race cars, museum pieces. */
 export const RARITIES = [
   { id: 'common',    label: 'Common',    colour: '#8a93a3', xp: 10,  blurb: 'Every street, every day.' },
   { id: 'uncommon',  label: 'Uncommon',  colour: '#4ade80', xp: 20,  blurb: 'You notice when one goes past.' },
   { id: 'rare',      label: 'Rare',      colour: '#38bdf8', xp: 40,  blurb: 'A proper find.' },
   { id: 'epic',      label: 'Epic',      colour: '#a855f7', xp: 75,  blurb: 'Stop and stare material.' },
-  { id: 'legendary', label: 'Legendary', colour: '#f5c542', xp: 120, blurb: 'Once-in-a-year sighting.' }
+  { id: 'legendary', label: 'Legendary', colour: '#f5c542', xp: 120, blurb: 'Once-in-a-year sighting.' },
+  { id: 'mythic',    label: 'Mythic',    colour: '#ff5ecd', xp: 200, blurb: 'One-offs and works race cars. Pinch yourself.' }
 ];
 
 export const RARITY_MAP = Object.fromEntries(RARITIES.map(r => [r.id, r]));
@@ -257,12 +259,28 @@ export function guessShape(make, model) {
 
 export const CLASSIC_YEAR = 1995;
 
+/* Set by app.js once the catalogue module has loaded, so data.js stays
+   dependency-free and the catalogue can be lazy-loaded. */
+let _catLookup = null;
+export function setCatalogueLookup(fn) { _catLookup = fn; }
+
 export function guessMeta(make, model, year) {
+  /* The catalogue is authoritative when it recognises the car — it carries
+     hand-checked type and rarity, including the Mythic one-offs. */
+  if (_catLookup) {
+    const hit = _catLookup(make, model);
+    if (hit) {
+      const types = [hit.type];
+      const y = Number(year);
+      if (y && y < CLASSIC_YEAR && !types.includes('classic')) types.push('classic');
+      return { types, rarity: hit.rarity, cat: hit };
+    }
+  }
   const text = `${make} ${model}`;
   const types = new Set();
   let rarity = 'common';
   const bump = (r) => {
-    const order = ['common','uncommon','rare','epic','legendary'];
+    const order = ['common','uncommon','rare','epic','legendary','mythic'];
     if (order.indexOf(r) > order.indexOf(rarity)) rarity = r;
   };
 

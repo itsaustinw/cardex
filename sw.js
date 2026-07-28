@@ -4,7 +4,7 @@
    Your dex (entries + photos) lives in IndexedDB and never passes through
    here — clearing or replacing this cache cannot touch your data. */
 
-const VERSION = 'v5';
+const VERSION = 'v6';
 const CACHE = `cardex-${VERSION}`;
 
 const SHELL = [
@@ -16,6 +16,7 @@ const SHELL = [
   './js/data.js',
   './js/store.js',
   './js/achievements.js',
+  './js/catalogue.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon.png',

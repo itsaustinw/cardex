@@ -7,6 +7,7 @@
    ═══════════════════════════════════════════ */
 
 import { TYPES, TYPE_MAP, RARITIES, COLOURS } from './data.js';
+import { CATALOGUE, CATALOGUE_MAKES, norm, baseModel, lookup as catLookup } from './catalogue.js';
 
 /* ───────── words for generated names ───────── */
 const TW = {
@@ -260,6 +261,9 @@ export function buildSummary(entries) {
 
   const dayCounts = {};
   const names = new Set();
+  /* catalogue coverage: which known cars have you actually found */
+  s.catFound = new Set();        // "make|model" of matched catalogue entries
+  s.catByMake = {};              // make -> Set(models found)
 
   for (const e of entries) {
     (e.types || []).forEach(t => s.types[t] = (s.types[t] || 0) + 1);
@@ -314,6 +318,12 @@ export function buildSummary(entries) {
 
     const nm = `${e.make || ''} ${e.model || ''}`.trim();
     if (nm) { names.add(nm); s.uniqueModels.add(nm.toLowerCase()); }
+
+    const hit = catLookup(e.make, e.model);
+    if (hit) {
+      s.catFound.add(`${hit.make}|${hit.model}`);
+      (s.catByMake[hit.make] ||= new Set()).add(hit.model);
+    }
   }
 
   s.bestDay = Object.values(dayCounts).reduce((m, v) => Math.max(m, v), 0);
@@ -344,6 +354,8 @@ export function buildSummary(entries) {
   s.monthCount = s.months.size;
   s.modelCount = s.uniqueModels.size;
   s.topMake = Object.entries(s.makes).sort((a, b) => b[1] - a[1])[0] || null;
+  s.catCount = s.catFound.size;
+  s.catOf = (make) => (s.catByMake[make] ? s.catByMake[make].size : 0);
 
   s.has = (make) => s.makeSet.has(make.toLowerCase()) ? 1 : 0;
   s.hasAll = (list) => list.filter(m => s.makeSet.has(m.toLowerCase())).length;
@@ -364,6 +376,7 @@ export const CATS = [
   { id: 'colours',    label: 'Colours',    icon: '🎨' },
   { id: 'era',        label: 'Eras',       icon: '🕰️' },
   { id: 'field',      label: 'Fieldwork',  icon: '🥾' },
+  { id: 'brands',     label: 'Brand Hunts', icon: '🏁' },
   { id: 'oddball',    label: 'Oddball',    icon: '🎲' }
 ];
 
@@ -762,6 +775,73 @@ add({ id: 'odd_gallery8', name: 'Photo Shoot', icon: '📷', cat: 'oddball', des
 add({ id: 'odd_documented', name: 'Fully Documented', icon: '🗂️', cat: 'oddball', desc: 'Photograph 100 entries', goal: 100, xp: 1200, value: s => s.withPhoto });
 add({ id: 'odd_loyal', name: 'Brand Loyalty', icon: '🧲', cat: 'oddball', desc: 'Log 50 of a single manufacturer', goal: 50, xp: 1500, value: s => s.topMake ? s.topMake[1] : 0 });
 add({ id: 'odd_loyal100', name: 'Utterly Obsessed', icon: '🎯', cat: 'oddball', desc: 'Log 100 of a single manufacturer', goal: 100, xp: 3000, value: s => s.topMake ? s.topMake[1] : 0 });
+
+/* ── 11. Catalogue completion ─────────────
+   "Collect every Lamborghini" — the long-haul brand hunts. Progress is
+   measured against the real catalogue, so these are honest targets. */
+
+const BRAND_ICON = {
+  Ferrari:'🐎', Lamborghini:'🐂', McLaren:'🧡', Bugatti:'🐘', Koenigsegg:'👻',
+  Pagani:'🌬️', Porsche:'🐎', 'Aston Martin':'🕴️', Bentley:'👼', 'Rolls-Royce':'👑',
+  Maserati:'🔱', Lotus:'🌸', Ford:'🔵', BMW:'🔷', 'Mercedes-Benz':'⭐', Audi:'⭕',
+  Volkswagen:'🔩', Vauxhall:'🦅', Toyota:'🔴', Nissan:'🌀', Honda:'🏁', Mazda:'🌊',
+  Subaru:'✨', Mitsubishi:'🔻', Jaguar:'🐆', 'Land Rover':'🏔️', Mini:'🇬🇧',
+  MG:'🐙', Lancia:'🌲', 'Alfa Romeo':'🐍', Fiat:'🇮🇹', Abarth:'🦂', Peugeot:'🦁',
+  Renault:'💠', 'Citroën':'⌃', Volvo:'🛡️', Saab:'🇸🇪', Tesla:'⚡', Lexus:'🎌',
+  Suzuki:'🏍️', Kia:'🟥', Hyundai:'🏁', 'Škoda':'🏹', SEAT:'🇪🇸', TVR:'🐉',
+  Morgan:'🌳', Caterham:'🪶', Alpine:'🇫🇷', Dacia:'⛰️', Smart:'🤏'
+};
+
+/* Every make with a meaningful catalogue gets a completion ladder. */
+for (const make of CATALOGUE_MAKES) {
+  const total = CATALOGUE[make].length;
+  if (total < 3) continue;                       // too small to be a "hunt"
+  const icon = BRAND_ICON[make] || '🏷️';
+
+  // percentage milestones, scaled so small marques stay achievable
+  const marks = total >= 40 ? [0.10, 0.25, 0.50, 0.75, 1]
+              : total >= 12 ? [0.25, 0.50, 0.75, 1]
+                            : [0.34, 0.67, 1];
+  const NAMES = ['Enthusiast', 'Collector', 'Curator', 'Historian', 'Completionist'];
+
+  marks.forEach((frac, i) => {
+    const goal = Math.max(1, Math.round(total * frac));
+    const isFull = frac === 1;
+    add({
+      id: `cat_${make.replace(/\W/g, '')}_${goal}`,
+      name: isFull ? `Every ${make}` : `${make} ${NAMES[Math.min(i, NAMES.length - 2)]}`,
+      icon, cat: 'brands',
+      desc: isFull
+        ? `Find all ${total} ${make} models in the catalogue`
+        : `Find ${goal} of the ${total} ${make} models`,
+      goal, xp: isFull ? 4000 + total * 20 : 200 + goal * 12,
+      value: s => s.catOf(make)
+    });
+  });
+}
+
+/* Overall catalogue progress */
+[[10,'Catalogued','📗'],[50,'Field Guide','📘'],[150,'Reference Work','📙'],
+ [400,'Standard Text','📕'],[800,'Definitive Edition','📚'],[1500,'The Great Work','🏛️'],
+ [3006,'Every Car Known','🌍']
+].forEach(([goal, name, icon]) => add({
+  id: `catall_${goal}`, name, icon, cat: 'brands',
+  desc: `Find ${goal.toLocaleString()} different catalogued models`,
+  goal, xp: 300 + goal * 3, value: s => s.catCount
+}));
+
+/* ── 12. Mythic tier ladders ────────────── */
+[[1,'First Mythic','🦄',600],[3,'Myth Hunter','🔮',1500],[5,'Myth Collector','✴️',2600],
+ [10,'Myth Keeper','🌌',5000],[25,'Living Myth','🪐',12000]
+].forEach(([goal, name, icon, xp]) => add({
+  id: `myth_${goal}`, name, icon, cat: 'rarity',
+  desc: goal === 1 ? 'Photograph a Mythic car' : `Photograph ${goal} Mythic cars`,
+  goal, xp, value: s => s.rarity.mythic || 0
+}));
+
+add({ id: 'myth_onefifty', name: 'The One-Offs', icon: '☝️', cat: 'quests',
+  desc: 'Find an MG EX181, a Le Mans GT40 or another true one-off', goal: 1, xp: 900,
+  value: s => s.rarity.mythic || 0 });
 
 export const ACHIEVEMENTS = A;
 export const TOTAL = A.length;
