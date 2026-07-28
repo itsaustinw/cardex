@@ -81,17 +81,49 @@ locked/unlocked, so you always know how close you are.
 
 Some highlights worth hunting:
 
-- **The Big Three** — photograph a Koenigsegg, a Bugatti *and* a Pagani. 5,000 XP.
-- **The Holy Trinity** — McLaren P1 + LaFerrari + Porsche 918. 8,000 XP.
-- **Grails** — 42 single-car quests, from *Grail: Morris Minor* (1,200 XP) up to
-  *Grail: McLaren F1* (9,000 XP).
+- **The Big Three** — photograph a Koenigsegg, a Bugatti *and* a Pagani. 390 XP.
+- **The Holy Trinity** — McLaren P1 + LaFerrari + Porsche 918. 490 XP.
+- **Grails** — 42 single-car quests, from *Grail: Morris Minor* (190 XP) up to
+  *Grail: McLaren F1* (520 XP).
 - **Group B Survivors** — a Delta Integrale, Quattro, RS200 or 205 T16.
 - **JDM Holy Grail** — Skyline, Supra, RX-7, NSX and an Evo.
 - **Unstoppable** — spot on 100 consecutive days.
 
-There's roughly **730,000 XP** available in total, which feeds a 14-step rank
-ladder from *Kerb Crawler* to *Immortal of the Hard Shoulder*. Clearing the lot
-is a genuine multi-year project.
+### How XP works
+
+Two sources, deliberately kept in balance:
+
+- **Spotting** — 10 XP for a Common up to 120 for a Legendary. A Legendary is
+  worth about 12 ordinary cars, so a good day of normal spotting still competes
+  with one lucky supercar.
+- **Achievements** — 20 XP for a small step, up to a hard ceiling of **600**.
+  Even *Grail: McLaren F1*, the rarest thing in the app, pays 520 — roughly 50
+  common cars. Achievements are a bonus on top of going out and finding things,
+  never a substitute for it.
+
+The whole achievement pool is about **92,000 XP**, and it feeds a 14-step rank
+ladder. Thresholds were set by simulating realistic dexes, so each rank lands on
+a real milestone rather than a round number:
+
+| Rank | Roughly |
+|---|---|
+| Kerb Crawler | your first car |
+| Spotter | ~5 cars |
+| Trainspotter of Tarmac | ~25 cars |
+| Car Nerd | ~60 cars |
+| Lay-by Legend | ~120 cars |
+| Bonnet Botherer | ~200 cars |
+| Concours Judge | ~350 cars |
+| Marque Specialist | ~600 cars |
+| Dex Master | ~800 cars |
+| Grand Archivist | ~1,300 cars |
+| Living Encyclopaedia | ~2,200 cars |
+| Tarmac Historian | ~3,500 cars |
+| The Completionist | ~5,500 cars |
+| Immortal of the Hard Shoulder | ~9,000 cars |
+
+Early ranks come quickly to build momentum; the top few are a long haul but
+genuinely reachable.
 
 When you save a car, any achievement it completes fires a gold unlock card
 straight after the dex entry animation. The stats sheet also shows the six

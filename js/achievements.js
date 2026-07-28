@@ -60,6 +60,25 @@ const TYPE_LADDER = {
   emergency: LADDER_RARE, barnfind: LADDER_RARE, concept: LADDER_RARE
 };
 
+/* ═══════════════════════════════════════════
+   XP BALANCE
+   Achievements are a bonus on top of spot XP, never a substitute for
+   actually going out and finding cars. A hard ceiling keeps any single
+   unlock from being worth more than a decent afternoon of spotting.
+   ═══════════════════════════════════════════ */
+
+export const XP_CAP = 600;   // no achievement may exceed this
+
+/* Compresses a "gut feeling" difficulty score into a sane XP value.
+   Square-root growth: a 100× harder achievement is worth ~10× more,
+   not 100× more. Rounded to 5 to keep the numbers tidy. */
+export function balance(raw) {
+  const v = Math.round(5.5 * Math.sqrt(Math.max(0, raw)) / 5) * 5;
+  return Math.min(XP_CAP, Math.max(15, v));
+}
+
+/* Raw difficulty score for a ladder step — NOT final XP.
+   Everything is balanced exactly once, inside add(). */
 function xpFor(goal) {
   if (goal <= 1) return 25;
   if (goal <= 3) return 40;
@@ -353,7 +372,16 @@ export const CATS = [
    ═══════════════════════════════════════════ */
 
 const A = [];
-const add = (o) => { A.push(o); return o; };
+
+/* Every achievement funnels through here, so the XP ceiling is enforced in
+   exactly one place. All xp values written below are raw "difficulty scores";
+   balance() converts each to its final award once, here, and nowhere else.
+   (balance() is deliberately NOT applied earlier — it isn't idempotent.) */
+const add = (o) => {
+  o.xp = balance(o.xp);
+  A.push(o);
+  return o;
+};
 
 /* ── 1. Collection totals ───────────────── */
 const DEX_TIERS = [
@@ -400,6 +428,9 @@ DEX_TIERS.forEach(([goal, name, icon]) => add({
 }));
 
 /* ── 2. Per-type ladders ────────────────── */
+/* "First <type>" unlocks are freebies that all fire in your opening week, so
+   they're worth a token amount. The real value sits further up each ladder. */
+const FIRST_STEP_XP = 12;
 for (const t of TYPES) {
   const w = TW[t.id]; if (!w) continue;
   const ladder = TYPE_LADDER[t.id] || LADDER_MID;
@@ -410,7 +441,7 @@ for (const t of TYPES) {
     add({
       id: `typ_${t.id}_${goal}`, name, icon: w.icon, cat: 'types',
       desc: goal === 1 ? `Log your first ${w.one}` : `Log ${goal} ${w.many}`,
-      goal, xp: xpFor(goal), colour: t.colour,
+      goal, xp: goal === 1 ? FIRST_STEP_XP : xpFor(goal), colour: t.colour,
       value: s => s.types[t.id] || 0
     });
   });
@@ -439,7 +470,8 @@ for (const r of RARITIES) {
       name: goal === 1 ? `First ${r.label}` : `${r.label} ${TIER[i - 1] || 'Immortal'}`,
       icon: RAR_ICON[r.id], cat: 'rarity', colour: r.colour,
       desc: goal === 1 ? `Log your first ${r.label} car` : `Log ${goal} ${r.label} cars`,
-      goal, xp: xpFor(goal) + (r.xp / 2 | 0), value: s => s.rarity[r.id] || 0
+      goal, xp: goal === 1 ? FIRST_STEP_XP + (r.xp | 0) : xpFor(goal) + (r.xp | 0),
+      value: s => s.rarity[r.id] || 0
     });
   });
 }
@@ -486,7 +518,7 @@ for (const [make, band, icon] of MAKE_LIST) {
     name: `${make} ${MAKE_TIER_NAME[i] || 'Obsessive'}`,
     icon, cat: 'makes',
     desc: goal === 1 ? `Log a ${make}` : `Log ${goal} ${make}s`,
-    goal, xp: xpFor(goal), value: s => s.makes[make] || 0
+    goal, xp: goal === 1 ? FIRST_STEP_XP : xpFor(goal), value: s => s.makes[make] || 0
   }));
 }
 [[5, 'Five Badges', '🏷️'], [10, 'Ten Badges', '🎫'], [20, 'Cosmopolitan', '🌍'],
@@ -625,7 +657,7 @@ for (const c of COLOURS) {
     name: i === 0 ? nm : `${nm} ${['I', 'II', 'III'][i]}`,
     icon, cat: 'colours', colour: c.hex.startsWith('#') ? c.hex : null,
     desc: goal === 1 ? `Log a ${c.label.toLowerCase()} car` : `Log ${goal} ${c.label.toLowerCase()} cars`,
-    goal, xp: xpFor(goal), value: s => s.colours[c.id] || 0
+    goal, xp: goal === 1 ? FIRST_STEP_XP : xpFor(goal), value: s => s.colours[c.id] || 0
   }));
 }
 [[4, 'Primary Colours', '🎨'], [8, 'Full Spectrum', '🌈'], [12, 'Colour Theory', '🖌️'], [16, 'Every Shade', '🎨']
@@ -635,13 +667,15 @@ for (const c of COLOURS) {
 }));
 
 /* ── 8. Eras ────────────────────────────── */
+/* Modern decades are everywhere, so they're near-freebies; pre-war metal is a
+   genuine event. Raw scores — balance() compresses these in add(). */
 const DECADES = [
   [1900, 'Brass Era', '🕯️', 8000], [1910, 'Edwardian', '🎩', 7000], [1920, 'Roaring Twenties', '🍸', 6000],
   [1930, 'Art Deco', '🏛️', 5000], [1940, 'Post-War', '📻', 4000], [1950, 'Fabulous Fifties', '🎸', 3000],
   [1960, 'Swinging Sixties', '☮️', 2200], [1970, 'Seventies Steel', '🕺', 1600],
-  [1980, 'Eighties Wedge', '📼', 1100], [1990, 'Nineties Nostalgia', '💾', 700],
-  [2000, 'Y2K Era', '💿', 400], [2010, 'The Twenty-Tens', '📱', 250],
-  [2020, 'Modern Metal', '🔋', 200]
+  [1980, 'Eighties Wedge', '📼', 900], [1990, 'Nineties Nostalgia', '💾', 400],
+  [2000, 'Y2K Era', '💿', 90], [2010, 'The Twenty-Tens', '📱', 25],
+  [2020, 'Modern Metal', '🔋', 25]
 ];
 for (const [dec, name, icon, xp] of DECADES) {
   add({ id: `dec_${dec}`, name, icon, cat: 'era', desc: `Log a car from the ${dec}s`, goal: 1, xp, value: s => s.decades[dec] || 0 });

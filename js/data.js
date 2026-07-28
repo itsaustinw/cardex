@@ -37,12 +37,14 @@ export const TYPES = [
 
 export const TYPE_MAP = Object.fromEntries(TYPES.map(t => [t.id, t]));
 
+/* Spot XP. Kept on a gentle curve — a Legendary is worth ~12 commons, not 40,
+   so a big day of ordinary spotting still competes with one lucky find. */
 export const RARITIES = [
   { id: 'common',    label: 'Common',    colour: '#8a93a3', xp: 10,  blurb: 'Every street, every day.' },
-  { id: 'uncommon',  label: 'Uncommon',  colour: '#4ade80', xp: 25,  blurb: 'You notice when one goes past.' },
-  { id: 'rare',      label: 'Rare',      colour: '#38bdf8', xp: 60,  blurb: 'A proper find.' },
-  { id: 'epic',      label: 'Epic',      colour: '#a855f7', xp: 150, blurb: 'Stop and stare material.' },
-  { id: 'legendary', label: 'Legendary', colour: '#f5c542', xp: 400, blurb: 'Once-in-a-year sighting.' }
+  { id: 'uncommon',  label: 'Uncommon',  colour: '#4ade80', xp: 20,  blurb: 'You notice when one goes past.' },
+  { id: 'rare',      label: 'Rare',      colour: '#38bdf8', xp: 40,  blurb: 'A proper find.' },
+  { id: 'epic',      label: 'Epic',      colour: '#a855f7', xp: 75,  blurb: 'Stop and stare material.' },
+  { id: 'legendary', label: 'Legendary', colour: '#f5c542', xp: 120, blurb: 'Once-in-a-year sighting.' }
 ];
 
 export const RARITY_MAP = Object.fromEntries(RARITIES.map(r => [r.id, r]));
@@ -291,23 +293,34 @@ export function guessMeta(make, model, year) {
 }
 
 /* Rank titles by total XP (spot XP + achievement XP).
-   Scaled against a full achievement sweep worth roughly 730,000 XP,
-   so the top ranks are a genuine long-haul. */
+   Thresholds are set from simulated dexes of a realistic UK spotter, so each
+   rank lands at a meaningful milestone rather than an arbitrary round number:
+
+     ~1 car     Kerb Crawler        ~350 cars   Marque Specialist
+     ~5 cars    Spotter             ~600 cars   Dex Master
+     ~15 cars   Trainspotter        ~1,000      Grand Archivist
+     ~40 cars   Car Nerd            ~1,700      Living Encyclopaedia
+     ~85 cars   Lay-by Legend       ~2,800      Tarmac Historian
+     ~160 cars  Bonnet Botherer     ~4,500      The Completionist
+     ~250 cars  Concours Judge      ~7,000      Immortal
+
+   Early ranks come quickly to build momentum; the last few are a long haul
+   but remain reachable, unlike the old 600,000 XP ceiling. */
 export const RANKS = [
-  { min: 0,       title: 'Kerb Crawler' },
-  { min: 250,     title: 'Spotter' },
-  { min: 1000,    title: 'Trainspotter of Tarmac' },
-  { min: 2500,    title: 'Car Nerd' },
-  { min: 6000,    title: 'Lay-by Legend' },
-  { min: 12000,   title: 'Bonnet Botherer' },
-  { min: 25000,   title: 'Concours Judge' },
-  { min: 45000,   title: 'Marque Specialist' },
-  { min: 75000,   title: 'Dex Master' },
-  { min: 120000,  title: 'Grand Archivist' },
-  { min: 180000,  title: 'Living Encyclopaedia' },
-  { min: 275000,  title: 'Tarmac Historian' },
-  { min: 400000,  title: 'The Completionist' },
-  { min: 600000,  title: 'Immortal of the Hard Shoulder' }
+  { min: 0,      title: 'Kerb Crawler' },
+  { min: 1200,   title: 'Spotter' },
+  { min: 2800,   title: 'Trainspotter of Tarmac' },
+  { min: 5500,   title: 'Car Nerd' },
+  { min: 9500,   title: 'Lay-by Legend' },
+  { min: 14500,  title: 'Bonnet Botherer' },
+  { min: 21000,  title: 'Concours Judge' },
+  { min: 28000,  title: 'Marque Specialist' },
+  { min: 38000,  title: 'Dex Master' },
+  { min: 52000,  title: 'Grand Archivist' },
+  { min: 72000,  title: 'Living Encyclopaedia' },
+  { min: 100000, title: 'Tarmac Historian' },
+  { min: 135000, title: 'The Completionist' },
+  { min: 185000, title: 'Immortal of the Hard Shoulder' }
 ];
 
 export function rankFor(xp) {
